@@ -114,34 +114,41 @@ fn handle_api_versions_request(version: i16) -> ApiVersionsResponse {
     ApiVersionsResponse { error_code, api_keys, throttle_time_ms: 0 }
 }
 
+
+fn handle_connection(mut stream: std::net::TcpStream) {
+    loop {
+        let mut size_buffer = [0u8; 4];
+        if stream.read_exact(&mut size_buffer).is_err() {
+            break;
+        }
+        let request_size = u32::from_be_bytes(size_buffer);
+
+        let mut buffer = vec![0u8; request_size as usize];
+        if stream.read_exact(&mut buffer).is_err() {
+            break;
+        }
+
+        let header = parse_request_header(&buffer);
+
+        let response: Box<dyn KafkaEncode> = match ApiKey::try_from(header.request_api_key) {
+            Ok(ApiKey::ApiVersions) => Box::new(handle_api_versions_request(header.request_api_version)),
+            Err(key) => {
+                println!("Unsupported API key: {key}");
+                Box::new(ErrorResponse { error_msg: "Unsupported API key".into() })
+            }
+        };
+
+        write_response(&mut stream, header.correlation_id, response.as_ref());
+    }
+}
+
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:9092").unwrap();
 
     for stream in listener.incoming() {
         match stream {
-            Ok(mut stream) => loop {
-                let mut size_buffer = [0u8; 4];
-                if stream.read_exact(&mut size_buffer).is_err() {
-                    break;
-                }
-                let request_size = u32::from_be_bytes(size_buffer);
-
-                let mut buffer = vec![0u8; request_size as usize];
-                if stream.read_exact(&mut buffer).is_err() {
-                    break;
-                }
-
-                let header = parse_request_header(&buffer);
-
-                let response: Box<dyn KafkaEncode> = match ApiKey::try_from(header.request_api_key) {
-                    Ok(ApiKey::ApiVersions) => Box::new(handle_api_versions_request(header.request_api_version)),
-                    Err(key) => {
-                        println!("Unsupported API key: {key}");
-                        Box::new(ErrorResponse { error_msg: "Unsupported API key".into() })
-                    }
-                };
-
-                write_response(&mut stream, header.correlation_id, response.as_ref());
+            Ok(stream) => {
+                std::thread::spawn(move || handle_connection(stream));
             }
             Err(e) => println!("error: {e}"),
         }
