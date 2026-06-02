@@ -7,6 +7,7 @@ use endpoints::describe_topic_partitions::{handle_topic_partitions_request, pars
 
 pub trait KafkaEncode {
     fn encode(&self, buf: &mut BytesMut);
+    fn response_header_version(&self) -> u8 { 1 }
 }
 
 #[derive(Clone, Copy)]
@@ -80,10 +81,13 @@ fn write_response(stream: &mut impl Write, correlation_id: i32, response: &dyn K
     let mut body = BytesMut::new();
     response.encode(&mut body);
 
-    let size = (5 + body.len()) as i32; // correlation_id (4) + tag_buffer (1) + body
+    let tag_buffer = response.response_header_version() >= 1;
+    let size = (4 + tag_buffer as usize + body.len()) as i32;
     stream.write_all(&size.to_be_bytes()).unwrap();
     stream.write_all(&correlation_id.to_be_bytes()).unwrap();
-    stream.write_all(&[0]).unwrap(); // empty TAG_BUFFER for response header v0
+    if tag_buffer {
+        stream.write_all(&[0]).unwrap(); // empty TAG_BUFFER for response header v1
+    }
     stream.write_all(&body).unwrap();
 }
 

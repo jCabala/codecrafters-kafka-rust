@@ -23,6 +23,8 @@ pub struct ApiVersionsResponse {
 }
 
 impl KafkaEncode for ApiVersionsResponse {
+    fn response_header_version(&self) -> u8 { 0 }
+
     fn encode(&self, buf: &mut BytesMut) {
         buf.put_i16(self.error_code);
         buf.put_u8(self.api_keys.len() as u8 + 1); // COMPACT_ARRAY: n+1
