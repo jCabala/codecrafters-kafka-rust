@@ -12,9 +12,11 @@ struct RequestHeaderV2 {
 
 
 fn parse_request_header(buffer: &[u8]) -> RequestHeaderV2 {
-    let request_api_key = i16::from_be_bytes([buffer[0], buffer[1]]);
-    let request_api_version = i16::from_be_bytes([buffer[2], buffer[3]]);
-    let correlation_id = i32::from_be_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]);
+    // We need to ignore the msg size (first 4 bytes) and then read the next 8 bytes for the request header
+    let HEADER_OFFSET: usize = 4;
+    let request_api_key = i16::from_be_bytes([buffer[HEADER_OFFSET], buffer[HEADER_OFFSET + 1]]);
+    let request_api_version = i16::from_be_bytes([buffer[HEADER_OFFSET + 2], buffer[HEADER_OFFSET + 3]]);
+    let correlation_id = i32::from_be_bytes([buffer[HEADER_OFFSET + 4], buffer[HEADER_OFFSET + 5], buffer[HEADER_OFFSET + 6], buffer[HEADER_OFFSET + 7]]);
 
     RequestHeaderV2 {
         request_api_key,
