@@ -10,8 +10,8 @@ fn write_response(stream: &mut impl Write, correlation_id: i32, response: &dyn K
     let mut body = BytesMut::new();
     response.encode(&mut body);
 
-    let size: [u8; 4] = [0, 0, 0, 0];
-    stream.write_all(&size).unwrap();
+    let size = (4 + body.len()) as i32; // correlation_id (4) + body
+    stream.write_all(&size.to_be_bytes()).unwrap();
     stream.write_all(&correlation_id.to_be_bytes()).unwrap();
     stream.write_all(&body).unwrap();
 }
