@@ -16,6 +16,34 @@ fn write_response(stream: &mut impl Write, correlation_id: i32, response: &dyn K
     stream.write_all(&body).unwrap();
 }
 
+#[derive(Clone, Copy)]
+enum ApiKey {
+    ApiVersions = 18,
+}
+
+impl ApiKey {
+    fn version_range(self) -> (i16, i16) {
+        match self {
+            ApiKey::ApiVersions => (0, 4),
+        }
+    }
+
+    fn all() -> &'static [ApiKey] {
+        &[ApiKey::ApiVersions]
+    }
+}
+
+impl TryFrom<i16> for ApiKey {
+    type Error = i16;
+
+    fn try_from(value: i16) -> Result<Self, Self::Error> {
+        match value {
+            18 => Ok(ApiKey::ApiVersions),
+            other => Err(other),
+        }
+    }
+}
+
 struct RequestHeaderV2 {
     request_api_key: i16,
     request_api_version: i16,
@@ -40,19 +68,50 @@ impl KafkaEncode for ErrorResponse {
     }
 }
 
+struct ApiKeyEntry {
+    api_key: i16,
+    min_version: i16,
+    max_version: i16,
+}
+
+impl KafkaEncode for ApiKeyEntry {
+    fn encode(&self, buf: &mut BytesMut) {
+        buf.put_i16(self.api_key);
+        buf.put_i16(self.min_version);
+        buf.put_i16(self.max_version);
+        buf.put_u8(0); // TAG_BUFFER
+    }
+}
+
 struct ApiVersionsResponse {
     error_code: i16,
+    api_keys: Vec<ApiKeyEntry>,
+    throttle_time_ms: i32,
 }
 
 impl KafkaEncode for ApiVersionsResponse {
     fn encode(&self, buf: &mut BytesMut) {
         buf.put_i16(self.error_code);
+        // COMPACT_ARRAY: length encoded as (n + 1) unsigned varint
+        buf.put_u8(self.api_keys.len() as u8 + 1);
+        for entry in &self.api_keys {
+            entry.encode(buf);
+        }
+        buf.put_i32(self.throttle_time_ms);
+        buf.put_u8(0); // TAG_BUFFER
     }
 }
 
 fn handle_api_versions_request(version: i16) -> ApiVersionsResponse {
     let error_code = if version < 0 || version > 4 { 35 } else { 0 };
-    ApiVersionsResponse { error_code }
+    let api_keys = ApiKey::all()
+        .iter()
+        .map(|&key| {
+            let (min_version, max_version) = key.version_range();
+            ApiKeyEntry { api_key: key as i16, min_version, max_version }
+        })
+        .collect();
+    ApiVersionsResponse { error_code, api_keys, throttle_time_ms: 0 }
 }
 
 fn main() {
@@ -74,9 +133,9 @@ fn main() {
                 let header = parse_request_header(&buffer);
 
                 // Handle the request based on the API key
-                let response: Box<dyn KafkaEncode> = match header.request_api_key {
-                    18 => Box::new(handle_api_versions_request(header.request_api_version)),
-                    key => {
+                let response: Box<dyn KafkaEncode> = match ApiKey::try_from(header.request_api_key) {
+                    Ok(ApiKey::ApiVersions) => Box::new(handle_api_versions_request(header.request_api_version)),
+                    Err(key) => {
                         println!("Unsupported API key: {key}");
                         Box::new(ErrorResponse { error_msg: "Unsupported API key".into() })
                     }
