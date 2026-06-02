@@ -27,10 +27,11 @@ pub struct DescribeTopicPartitionsResponse {
 
 impl KafkaEncode for DescribeTopicPartitionsResponse {
     fn encode(&self, buf: &mut BytesMut) {
+        buf.put_i32(0); // throttle_time_ms
         buf.put_u8(self.topics.len() as u8 + 1); // COMPACT_ARRAY: n+1
         for topic in &self.topics {
             buf.put_i16(topic.error_code);
-            buf.put_u8(topic.topic_name.len() as u8 + 1); // COMPACT_STRING: n+1
+            buf.put_u8(topic.topic_name.len() as u8 + 1); // COMPACT_NULLABLE_STRING: n+1
             buf.extend_from_slice(topic.topic_name.as_bytes());
             buf.extend_from_slice(topic.topic_id.as_bytes());
             buf.put_u8(topic.is_internal as u8);
@@ -38,6 +39,7 @@ impl KafkaEncode for DescribeTopicPartitionsResponse {
             buf.put_i32(topic.topic_authorized_operations);
             buf.put_u8(0); // TAG_BUFFER
         }
+        buf.put_u8(0xFF); // next_cursor: null
         buf.put_u8(0); // TAG_BUFFER
     }
 }
