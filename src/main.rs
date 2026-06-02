@@ -19,17 +19,19 @@ fn write_response(stream: &mut impl Write, correlation_id: i32, response: &dyn K
 #[derive(Clone, Copy)]
 enum ApiKey {
     ApiVersions = 18,
+    DescribeTopicPartitions = 75,
 }
 
 impl ApiKey {
     fn version_range(self) -> (i16, i16) {
         match self {
             ApiKey::ApiVersions => (0, 4),
+            ApiKey::DescribeTopicPartitions => (0, 0),
         }
     }
 
     fn all() -> &'static [ApiKey] {
-        &[ApiKey::ApiVersions]
+        &[ApiKey::ApiVersions, ApiKey::DescribeTopicPartitions]
     }
 }
 
@@ -39,6 +41,7 @@ impl TryFrom<i16> for ApiKey {
     fn try_from(value: i16) -> Result<Self, Self::Error> {
         match value {
             18 => Ok(ApiKey::ApiVersions),
+            75 => Ok(ApiKey::DescribeTopicPartitions),
             other => Err(other),
         }
     }
@@ -132,6 +135,7 @@ fn handle_connection(mut stream: std::net::TcpStream) {
 
         let response: Box<dyn KafkaEncode> = match ApiKey::try_from(header.request_api_key) {
             Ok(ApiKey::ApiVersions) => Box::new(handle_api_versions_request(header.request_api_version)),
+            Ok(ApiKey::DescribeTopicPartitions) => todo!(),
             Err(key) => {
                 println!("Unsupported API key: {key}");
                 Box::new(ErrorResponse { error_msg: "Unsupported API key".into() })
