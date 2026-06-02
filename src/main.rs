@@ -119,20 +119,20 @@ fn main() {
 
     for stream in listener.incoming() {
         match stream {
-            Ok(mut stream) => {
-                // Read the request size (4 bytes)
+            Ok(mut stream) => loop {
                 let mut size_buffer = [0u8; 4];
-                stream.read_exact(&mut size_buffer).unwrap();
+                if stream.read_exact(&mut size_buffer).is_err() {
+                    break;
+                }
                 let request_size = u32::from_be_bytes(size_buffer);
-                
-                // Read the rest of the request based on the size
-                let mut buffer = vec![0u8; request_size as usize];
-                stream.read_exact(&mut buffer).unwrap();
 
-                // Parse the request header
+                let mut buffer = vec![0u8; request_size as usize];
+                if stream.read_exact(&mut buffer).is_err() {
+                    break;
+                }
+
                 let header = parse_request_header(&buffer);
 
-                // Handle the request based on the API key
                 let response: Box<dyn KafkaEncode> = match ApiKey::try_from(header.request_api_key) {
                     Ok(ApiKey::ApiVersions) => Box::new(handle_api_versions_request(header.request_api_version)),
                     Err(key) => {
