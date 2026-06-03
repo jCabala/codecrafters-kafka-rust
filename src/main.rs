@@ -1,81 +1,17 @@
 use std::{io::{Read, Write}, net::TcpListener};
-use bytes::{BufMut, BytesMut};
+use bytes::BytesMut;
 
 mod endpoints;
+mod protocol_types;
+
 use endpoints::api_versions::handle_api_versions_request;
-use endpoints::describe_topic_partitions::{handle_topic_partitions_request, parse_describe_topic_partitions_request};
+use endpoints::describe_topic_partitions::handle_topic_partitions_request;
+use protocol_types::api_key::ApiKey;
+use protocol_types::describe_topic_partitions::parse_describe_topic_partitions_request;
+use protocol_types::error_response::ErrorResponse;
+use protocol_types::kafka_encode::KafkaEncode;
+use protocol_types::request_header::parse_request_header;
 
-pub trait KafkaEncode {
-    fn encode(&self, buf: &mut BytesMut);
-    fn response_header_version(&self) -> u8 { 1 }
-}
-
-#[derive(Clone, Copy)]
-pub enum ApiKey {
-    ApiVersions = 18,
-    DescribeTopicPartitions = 75,
-}
-
-impl ApiKey {
-    pub fn version_range(self) -> (i16, i16) {
-        match self {
-            ApiKey::ApiVersions => (0, 4),
-            ApiKey::DescribeTopicPartitions => (0, 0),
-        }
-    }
-
-    pub fn all() -> &'static [ApiKey] {
-        &[ApiKey::ApiVersions, ApiKey::DescribeTopicPartitions]
-    }
-}
-
-impl TryFrom<i16> for ApiKey {
-    type Error = i16;
-
-    fn try_from(value: i16) -> Result<Self, Self::Error> {
-        match value {
-            18 => Ok(ApiKey::ApiVersions),
-            75 => Ok(ApiKey::DescribeTopicPartitions),
-            other => Err(other),
-        }
-    }
-}
-
-#[allow(dead_code)]
-pub struct RequestHeaderV2 {
-    pub request_api_key: i16,
-    pub request_api_version: i16,
-    pub correlation_id: i32,
-    pub client_id: Option<String>,
-    pub tag_buffer: Vec<u8>,
-}
-
-pub fn parse_request_header(buffer: &[u8]) -> (RequestHeaderV2, usize) {
-    let request_api_key = i16::from_be_bytes([buffer[0], buffer[1]]);
-    let request_api_version = i16::from_be_bytes([buffer[2], buffer[3]]);
-    let correlation_id = i32::from_be_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]);
-    let client_id_length = i16::from_be_bytes([buffer[8], buffer[9]]);
-    let (client_id, tag_buffer_start) = if client_id_length < 0 {
-        (None, 10) // -1 means null
-    } else {
-        let len = client_id_length as usize;
-        (Some(String::from_utf8_lossy(&buffer[10..10 + len]).to_string()), 10 + len)
-    };
-    let tag_buffer_length = buffer[tag_buffer_start] as usize;
-    let tag_buffer = buffer[tag_buffer_start + 1..tag_buffer_start + 1 + tag_buffer_length].to_vec();
-    (
-        RequestHeaderV2 { request_api_key, request_api_version, correlation_id, client_id, tag_buffer },
-        tag_buffer_start + 1 + tag_buffer_length,
-    )
-}
-
-struct ErrorResponse;
-
-impl KafkaEncode for ErrorResponse {
-    fn encode(&self, buf: &mut BytesMut) {
-        buf.put_i16(35);
-    }
-}
 
 fn write_response(stream: &mut impl Write, correlation_id: i32, response: &dyn KafkaEncode) {
     let mut body = BytesMut::new();
@@ -86,7 +22,7 @@ fn write_response(stream: &mut impl Write, correlation_id: i32, response: &dyn K
     stream.write_all(&size.to_be_bytes()).unwrap();
     stream.write_all(&correlation_id.to_be_bytes()).unwrap();
     if tag_buffer {
-        stream.write_all(&[0]).unwrap(); // empty TAG_BUFFER for response header v1
+        stream.write_all(&[0]).unwrap();
     }
     stream.write_all(&body).unwrap();
 }
@@ -94,15 +30,11 @@ fn write_response(stream: &mut impl Write, correlation_id: i32, response: &dyn K
 fn handle_connection(mut stream: std::net::TcpStream) {
     loop {
         let mut size_buffer = [0u8; 4];
-        if stream.read_exact(&mut size_buffer).is_err() {
-            break;
-        }
+        if stream.read_exact(&mut size_buffer).is_err() { break; }
         let request_size = u32::from_be_bytes(size_buffer);
 
         let mut buffer = vec![0u8; request_size as usize];
-        if stream.read_exact(&mut buffer).is_err() {
-            break;
-        }
+        if stream.read_exact(&mut buffer).is_err() { break; }
 
         let (header, body_offset) = parse_request_header(&buffer);
 

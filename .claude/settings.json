@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cargo check *)"
+      "Bash(cargo check *)",
+      "Bash(chmod +x /home/jcabala/CodeCrafters/codecrafters-kafka-rust/scripts/setup_kafka.sh)",
+      "Bash(podman exec *)",
+      "Bash(mkdir -p /tmp/kraft-combined-logs)",
+      "Bash(podman cp *)",
+      "Bash(ls /tmp/kraft-combined-logs/__cluster_metadata-0/)",
+      "Read(//tmp/kraft-combined-logs/__cluster_metadata-0/**)",
+      "WebSearch",
+      "Bash(xxd /tmp/kraft-combined-logs/__cluster_metadata-0/00000000000000000000.log)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }
