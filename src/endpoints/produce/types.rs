@@ -29,12 +29,22 @@ pub(super) struct TopicResponse {
 }
 
 impl TopicResponse {
-    pub(super) fn from_request(topic: &ProduceTopicData) -> Self {
+    pub(super) fn found(topic: &ProduceTopicData) -> Self {
         Self {
             name: topic.name.clone(),
             partitions: topic.partitions.iter().map(|p| PartitionResponse {
                 index: p.index,
                 error_code: 0,
+            }).collect(),
+        }
+    }
+
+    pub(super) fn not_found(topic: &ProduceTopicData) -> Self {
+        Self {
+            name: topic.name.clone(),
+            partitions: topic.partitions.iter().map(|p| PartitionResponse {
+                index: p.index,
+                error_code: 3, // UNKNOWN_TOPIC_OR_PARTITION
             }).collect(),
         }
     }
