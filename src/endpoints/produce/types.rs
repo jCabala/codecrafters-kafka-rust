@@ -22,6 +22,7 @@ struct PartitionResponse {
     index: i32,
     error_code: i16,
     base_offset: i64,
+    log_start_offset: i64,
 }
 
 pub(super) struct TopicResponse {
@@ -37,6 +38,7 @@ impl TopicResponse {
                 index: p.index,
                 error_code: 0,
                 base_offset: 0,
+                log_start_offset: 0,
             }).collect(),
         }
     }
@@ -48,6 +50,7 @@ impl TopicResponse {
                 index: p.index,
                 error_code: 3, // UNKNOWN_TOPIC_OR_PARTITION
                 base_offset: -1,
+                log_start_offset: -1,
             }).collect(),
         }
     }
@@ -75,7 +78,7 @@ impl KafkaEncode for ProduceResponse {
                 buf.put_i16(p.error_code);
                 buf.put_i64(p.base_offset);
                 buf.put_i64(-1); // log_append_time_ms
-                buf.put_i64(0);  // log_start_offset
+                buf.put_i64(p.log_start_offset);
                 buf.put_u8(1);   // record_errors: empty COMPACT_ARRAY
                 buf.put_u8(0);   // error_message: null
                 buf.put_u8(0);   // TAG_BUFFER
