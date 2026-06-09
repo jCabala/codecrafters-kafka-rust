@@ -1,5 +1,7 @@
-use crate::protocol_types::api_key::ApiKey;
-use crate::protocol_types::api_versions::{ApiKeyEntry, ApiVersionsResponse};
+pub mod types;
+
+use crate::endpoints::api_key::ApiKey;
+use types::{ApiKeyEntry, ApiVersionsResponse};
 
 pub fn handle_api_versions_request(version: i16) -> ApiVersionsResponse {
     let error_code = if version < 0 || version > 4 { 35 } else { 0 };

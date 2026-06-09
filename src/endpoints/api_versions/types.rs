@@ -1,6 +1,5 @@
 use bytes::{BufMut, BytesMut};
-use crate::protocol_types::api_key::ApiKey;
-use crate::protocol_types::kafka_encode::KafkaEncode;
+use crate::endpoints::encode::KafkaEncode;
 
 pub struct ApiKeyEntry {
     pub api_key: i16,

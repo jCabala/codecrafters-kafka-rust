@@ -1,17 +1,16 @@
 use std::{io::{Read, Write}, net::TcpListener};
 use bytes::BytesMut;
 
+mod cluster;
 mod endpoints;
-mod protocol_types;
 
+use endpoints::encode::KafkaEncode;
+use endpoints::api_key::ApiKey;
+use endpoints::request::parse_request_header;
 use endpoints::api_versions::handle_api_versions_request;
-use endpoints::describe_topic_partitions::handle_topic_partitions_request;
-use protocol_types::api_key::ApiKey;
-use protocol_types::describe_topic_partitions::parse_describe_topic_partitions_request;
-use protocol_types::error_response::ErrorResponse;
-use protocol_types::kafka_encode::KafkaEncode;
-use protocol_types::request_header::parse_request_header;
-
+use endpoints::describe_topic_partitions::{handle_topic_partitions_request, parse_describe_topic_partitions_request};
+use endpoints::produce::{handle_produce_request, parse_produce_request};
+use endpoints::error::ErrorResponse;
 
 fn write_response(stream: &mut impl Write, correlation_id: i32, response: &dyn KafkaEncode) {
     let mut body = BytesMut::new();
@@ -43,6 +42,10 @@ fn handle_connection(mut stream: std::net::TcpStream) {
             Ok(ApiKey::DescribeTopicPartitions) => {
                 let request = parse_describe_topic_partitions_request(&buffer, body_offset);
                 Box::new(handle_topic_partitions_request(request))
+            }
+            Ok(ApiKey::Produce) => {
+                let request = parse_produce_request(&buffer, body_offset);
+                Box::new(handle_produce_request(request))
             }
             Err(key) => {
                 println!("Unsupported API key: {key}");

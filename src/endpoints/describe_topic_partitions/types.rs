@@ -1,35 +1,80 @@
 use bytes::{BufMut, BytesMut};
-use crate::protocol_types::kafka_encode::KafkaEncode;
+use uuid::Uuid;
+use crate::endpoints::encode::KafkaEncode;
+use crate::cluster::partition::Partition;
+use crate::cluster::topic::Topic;
 
 pub struct ReqTopic {
     pub name: String,
-    pub tag_buffer: Vec<u8>,
 }
 
 pub struct DescribeTopicPartitionsRequest {
     pub topics_array: Vec<ReqTopic>,
 }
 
-pub struct RespPartition {
-    pub error_code: i16,
-    pub partition_index: i32,
-    pub leader_id: i32,
-    pub leader_epoch: i32,
-    pub replica_nodes: Vec<i32>,
-    pub isr_nodes: Vec<i32>,
+struct RespPartition {
+    error_code: i16,
+    partition_index: i32,
+    leader_id: i32,
+    leader_epoch: i32,
+    replica_nodes: Vec<i32>,
+    isr_nodes: Vec<i32>,
 }
 
-pub struct RespTopic {
-    pub error_code: i16,
-    pub topic_name: String,
-    pub topic_id: uuid::Uuid,
-    pub is_internal: bool,
-    pub partitions: Vec<RespPartition>,
-    pub topic_authorized_operations: i32,
+impl From<&Partition> for RespPartition {
+    fn from(p: &Partition) -> Self {
+        Self {
+            error_code: 0,
+            partition_index: p.index(),
+            leader_id: p.leader_id(),
+            leader_epoch: p.leader_epoch(),
+            replica_nodes: p.replica_nodes().to_vec(),
+            isr_nodes: p.isr_nodes().to_vec(),
+        }
+    }
+}
+
+pub(super) struct RespTopic {
+    error_code: i16,
+    topic_name: String,
+    topic_id: Uuid,
+    is_internal: bool,
+    partitions: Vec<RespPartition>,
+    topic_authorized_operations: i32,
+}
+
+impl RespTopic {
+    pub(super) fn found(name: String, topic: &Topic) -> Self {
+        Self {
+            error_code: 0,
+            topic_name: name,
+            topic_id: topic.id(),
+            is_internal: false,
+            partitions: topic.partitions().iter().map(RespPartition::from).collect(),
+            topic_authorized_operations: 0,
+        }
+    }
+
+    pub(super) fn not_found(name: String) -> Self {
+        Self {
+            error_code: 3, // UNKNOWN_TOPIC_OR_PARTITION
+            topic_name: name,
+            topic_id: Uuid::nil(),
+            is_internal: false,
+            partitions: vec![],
+            topic_authorized_operations: 0,
+        }
+    }
 }
 
 pub struct DescribeTopicPartitionsResponse {
-    pub topics: Vec<RespTopic>,
+    topics: Vec<RespTopic>,
+}
+
+impl DescribeTopicPartitionsResponse {
+    pub(super) fn new(topics: Vec<RespTopic>) -> Self {
+        Self { topics }
+    }
 }
 
 impl KafkaEncode for DescribeTopicPartitionsResponse {
@@ -75,10 +120,8 @@ pub fn parse_describe_topic_partitions_request(buffer: &[u8], body_offset: usize
         let name = String::from_utf8_lossy(&buffer[offset..offset + name_length]).to_string();
         offset += name_length;
         let tag_buffer_length = buffer[offset] as usize;
-        offset += 1;
-        let tag_buffer = buffer[offset..offset + tag_buffer_length].to_vec();
-        offset += tag_buffer_length;
-        topics_array.push(ReqTopic { name, tag_buffer });
+        offset += 1 + tag_buffer_length;
+        topics_array.push(ReqTopic { name });
     }
     DescribeTopicPartitionsRequest { topics_array }
 }

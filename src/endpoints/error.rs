@@ -1,5 +1,5 @@
 use bytes::{BufMut, BytesMut};
-use crate::protocol_types::kafka_encode::KafkaEncode;
+use crate::endpoints::encode::KafkaEncode;
 
 pub struct ErrorResponse;
 
